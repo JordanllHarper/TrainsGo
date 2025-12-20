@@ -5,7 +5,7 @@ import (
 	"slices"
 )
 
-type Station struct {
+type station struct {
 	// unique identifier of the station as well as descriptive name
 	Name string `json:"name"`
 	// set of platform numbers
@@ -16,11 +16,12 @@ type Station struct {
 
 type (
 	stationReader interface {
-		ReadAll() ([]Station, error)
-		ReadByName(name string) (exists bool, st Station, err error)
+		ReadAll() ([]station, error)
+		ReadMany(names []string) (validNames bool, sts []station, err error)
+		ReadByName(name string) (exists bool, st station, err error)
 	}
 	stationWriter interface {
-		Upsert(st Station) (isUpdate bool, err error)
+		Upsert(st station) (isUpdate bool, err error)
 		Delete(name string) error
 	}
 
@@ -30,21 +31,35 @@ type (
 	}
 )
 
-type inMemoryStationStore map[string]Station
+type inMemoryStationStore map[string]station
 
-func (s inMemoryStationStore) ReadAll() ([]Station, error) {
+func (s inMemoryStationStore) ReadAll() ([]station, error) {
 	vals := maps.Values(s)
 	return slices.Collect(vals), nil
 }
-func (s inMemoryStationStore) ReadByName(name string) (exists bool, st Station, err error) {
+
+func (s inMemoryStationStore) ReadMany(names []string) (validNames bool, sts []station, err error) {
+	stations := []station{}
+
+	for _, name := range names {
+		if val, ok := s[name]; ok {
+			stations = append(stations, val)
+		} else {
+			return false, nil, nil
+		}
+	}
+
+	return true, stations, nil
+}
+func (s inMemoryStationStore) ReadByName(name string) (exists bool, st station, err error) {
 	if val, ok := s[name]; ok {
 		return true, val, nil
 	}
 
-	return false, Station{}, nil
+	return false, station{}, nil
 }
 
-func (s inMemoryStationStore) Upsert(st Station) (isUpdate bool, err error) {
+func (s inMemoryStationStore) Upsert(st station) (isUpdate bool, err error) {
 	_, contains := s[st.Name]
 	s[st.Name] = st
 	return contains, nil

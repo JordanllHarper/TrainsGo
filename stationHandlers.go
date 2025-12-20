@@ -10,14 +10,13 @@ import (
 
 func handleGetStations(s stationReader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		query := r.URL.Query()
 		type responseDto struct {
 			Name      string   `json:"name"`
 			Platforms []int    `json:"platforms"`
 			Neighbors []string `json:"neighbors"`
 		}
 
-		mapToDto := func(st Station) responseDto {
+		mapToDto := func(st station) responseDto {
 			platforms := slices.Sorted(maps.Keys(st.Platforms))
 			return responseDto{
 				Name:      st.Name,
@@ -25,27 +24,45 @@ func handleGetStations(s stationReader) http.HandlerFunc {
 				Neighbors: st.Neighbors,
 			}
 		}
-		w.Header().Add("content-type", "application/json")
-		if !query.Has("name") {
-			allStations, err := s.ReadAll()
-			dtos := []responseDto{}
+		allStations, err := s.ReadAll()
+		dtos := []responseDto{}
 
-			for _, st := range allStations {
-				dtos = append(dtos, mapToDto(st))
-			}
+		for _, st := range allStations {
+			dtos = append(dtos, mapToDto(st))
+		}
 
-			if err != nil {
-				serverError(w, err)
-				return
-			}
-
-			if err := jsonEncode(w, dtos); err != nil {
-				log.Fatalln(err)
-			}
+		if err != nil {
+			serverError(w, err)
 			return
 		}
 
-		name := query.Get("name")
+		if err := writeJsonToHttpOk(w, dtos); err != nil {
+			log.Println(err)
+		}
+	}
+}
+
+func handleGetStationByName(s stationReader) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		type responseDto struct {
+			Name      string   `json:"name"`
+			Platforms []int    `json:"platforms"`
+			Neighbors []string `json:"neighbors"`
+		}
+
+		mapToDto := func(st station) responseDto {
+			platforms := slices.Sorted(maps.Keys(st.Platforms))
+			return responseDto{
+				Name:      st.Name,
+				Platforms: platforms,
+				Neighbors: st.Neighbors,
+			}
+		}
+		name := r.PathValue("name")
+		if stringIsEmpty(name) {
+			badRequest(w, errors.New("Missing name path parameter"))
+			return
+		}
 
 		exists, st, err := s.ReadByName(name)
 		if !exists {
@@ -60,7 +77,7 @@ func handleGetStations(s stationReader) http.HandlerFunc {
 
 		dto := mapToDto(st)
 
-		if err := jsonEncode(w, dto); err != nil {
+		if err := writeJsonToHttpOk(w, dto); err != nil {
 			log.Println(err)
 		}
 	}
@@ -72,17 +89,17 @@ func handlePostStations(s stationStore) http.HandlerFunc {
 		Platforms []int    `json:"platforms"`
 		Neighbors []string `json:"neighbors"`
 	}
-	validate := func(dto requestDto) (Station, error) {
+	validate := func(dto requestDto) (station, error) {
 		if stringIsNilOrEmpty(dto.Name) {
-			return Station{}, errors.New("Invalid Station Name")
+			return station{}, errors.New("Invalid Station Name")
 		}
 
 		if dto.Platforms == nil {
-			return Station{}, errors.New("Invalid Station Platforms")
+			return station{}, errors.New("Invalid Station Platforms")
 		}
 
 		if dto.Neighbors == nil {
-			return Station{}, errors.New("Invalid Station Neighbors")
+			return station{}, errors.New("Invalid Station Neighbors")
 		}
 
 		platforms := map[int]bool{}
@@ -90,7 +107,7 @@ func handlePostStations(s stationStore) http.HandlerFunc {
 			platforms[v] = true
 		}
 
-		return Station{
+		return station{
 			Name:      *dto.Name,
 			Platforms: platforms,
 			Neighbors: dto.Neighbors,
@@ -121,8 +138,7 @@ func handlePostStations(s stationStore) http.HandlerFunc {
 			serverError(w, err)
 			return
 		}
-		w.WriteHeader(http.StatusCreated)
-		if err := jsonEncode(w, reqDto); err != nil {
+		if err := writeJsonToHttp(w, http.StatusCreated, reqDto); err != nil {
 			log.Println(err)
 		}
 	}
@@ -133,20 +149,20 @@ func handlePutStations(s stationWriter) http.HandlerFunc {
 		Platforms []int    `json:"platforms"`
 		Neighbors []string `json:"neighbors"`
 	}
-	validate := func(name string, dto requestDto) (Station, error) {
+	validate := func(name string, dto requestDto) (station, error) {
 		if dto.Platforms == nil {
-			return Station{}, errors.New("Invalid Station Platforms")
+			return station{}, errors.New("Invalid Station Platforms")
 		}
 
 		if dto.Neighbors == nil {
-			return Station{}, errors.New("Invalid Station Neighbors")
+			return station{}, errors.New("Invalid Station Neighbors")
 		}
 
 		platforms := map[int]bool{}
 		for _, v := range dto.Platforms {
 			platforms[v] = true
 		}
-		return Station{
+		return station{
 			Name:      name,
 			Platforms: platforms,
 			Neighbors: dto.Neighbors,
@@ -180,11 +196,9 @@ func handlePutStations(s stationWriter) http.HandlerFunc {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		w.WriteHeader(http.StatusCreated)
-		if err := jsonEncode(w, st); err != nil {
+		if err := writeJsonToHttp(w, http.StatusCreated, st); err != nil {
 			log.Println(err)
 		}
-
 	}
 }
 
@@ -201,12 +215,4 @@ func handleDeleteStations(s stationWriter) http.HandlerFunc {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}
-}
-
-func serverError(w http.ResponseWriter, err error) {
-	http.Error(w, err.Error(), http.StatusInternalServerError)
-}
-
-func badRequest(w http.ResponseWriter, err error) {
-	http.Error(w, err.Error(), http.StatusBadRequest)
 }
