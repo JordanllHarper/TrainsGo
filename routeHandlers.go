@@ -52,7 +52,7 @@ func handleGetRouteById(s routeReader) http.HandlerFunc {
 	}
 }
 
-func handlePostRoute(s stationStore, rs routeStore) http.HandlerFunc {
+func handlePostRoute(s stationStore, rs routeStore, rb routeBuilder) http.HandlerFunc {
 	type requestDto struct {
 		requiredStations map[int]string
 	}
@@ -101,7 +101,7 @@ func handlePostRoute(s stationStore, rs routeStore) http.HandlerFunc {
 			badRequest(w, errors.New("Invalid provided names"))
 			return
 		}
-		route, err := rs.Build(stations)
+		route, err := rb.Build(stations)
 		if err != nil {
 			serverError(w, err)
 			return

@@ -1,53 +1,58 @@
 package main
 
-func setupMock() stores {
-	// test station store
-	ss := inMemoryStationStore{
-		"testStation": station{
-			Name: "testStation",
-			Platforms: map[int]bool{
-				1: true,
-				2: true,
-				3: true,
-			},
-			Neighbors: []string{
-				"anotherTestStation",
-			},
-		},
+func setupMock() dependencies {
+	// Define a simple 2 station connection
+	// Creates a route back and fourth between them
 
-		"anotherTestStation": station{
-			Name: "anotherTestStation",
-			Platforms: map[int]bool{
-				1: true,
-				2: true,
-			},
-			Neighbors: []string{
-				"testStation",
-			},
+	stationOne := station{
+		Name: "stationOne",
+		Platforms: map[int]bool{
+			1: true,
+			2: true,
+			3: true,
+		},
+		Neighbors: []string{
+			"stationTwo",
+		},
+	}
+	stationTwo := station{
+		Name: "stationTwo",
+		Platforms: map[int]bool{
+			1: true,
+			2: true,
+		},
+		Neighbors: []string{
+			"stationOne",
 		},
 	}
 
-	testNodeIdOne := "03d3a549-4a2b-44c5-ac81-4548d89a5340"
-	testNodeIdTwo := "e3c91099-5c65-4b9c-8646-0acb39dfba6d"
+	ss := inMemoryStationStore{
+		"stationOne": stationOne,
+		"stationTwo": stationTwo,
+	}
+
 	rs := inMemoryRouteStore{
 		"8d7e2ad1-2c16-44f7-9c55-bc181d83900b": route{
-			Id: "8d7e2ad1-2c16-44f7-9c55-bc181d83900b",
-			StartNode: routeStationNode{
-				Id:           testNodeIdOne,
-				StationName:  "testStation",
-				PreviousNode: nil,
-				NextNode:     &testNodeIdTwo,
+			RouteId: "8d7e2ad1-2c16-44f7-9c55-bc181d83900b",
+			Route: map[int]station{
+				1: stationOne,
+				2: stationTwo,
 			},
-			EndNode: routeStationNode{
-				Id:           testNodeIdTwo,
-				StationName:  "anotherTestStation",
-				PreviousNode: &testNodeIdOne,
-				NextNode:     nil,
+		},
+
+		"a4b6776b-5f38-456b-9d8c-7abd7a0f10d4": route{
+			RouteId: "a4b6776b-5f38-456b-9d8c-7abd7a0f10d4",
+			Route: map[int]station{
+				1: stationTwo,
+				2: stationOne,
 			},
 		},
 	}
-	return stores{
+	// NOTE: Mocking this might include setting up defined routes already :D
+	rb := inMemoryRouteBuilder{}
+	return dependencies{
 		ss: ss,
 		rs: rs,
+		rb: rb,
 	}
 }

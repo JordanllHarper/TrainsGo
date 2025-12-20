@@ -9,18 +9,8 @@ import (
 type (
 	// A path to take from a start node to an end node
 	route struct {
-		Id        string           `json:"id"`
-		StartNode routeStationNode `json:"start"`
-		EndNode   routeStationNode `json:"end"`
-	}
-
-	// Node on a graph in a route that is a station a train would stop at
-	routeStationNode struct {
-		Id           string  `json:"id"`
-		RouteId      string  `json:"routeId"`
-		StationName  string  `json:"stationId"`
-		PreviousNode *string `json:"previous"`
-		NextNode     *string `json:"next"`
+		RouteId string          `json:"routeId"`
+		Route   map[int]station `json:"route"`
 	}
 
 	routeReader interface {
@@ -36,16 +26,17 @@ type (
 	routeStore interface {
 		routeReader
 		routeWriter
-		routeBuilder
 	}
 
 	routeBuilder interface {
 		// Builds a route from a list of stations
 		Build(stations []station) (route, error)
 	}
-)
 
-type inMemoryRouteStore map[string]route
+	inMemoryRouteStore map[string]route
+
+	inMemoryRouteBuilder map[string]station
+)
 
 func (s inMemoryRouteStore) ReadAll() ([]route, error) {
 	return slices.Collect(maps.Values(s)), nil
@@ -61,7 +52,7 @@ func (s inMemoryRouteStore) ReadById(id string) (exists bool, r route, err error
 }
 
 func (s inMemoryRouteStore) Insert(r route) error {
-	s[r.Id] = r
+	s[r.RouteId] = r
 	return nil
 }
 
@@ -70,7 +61,7 @@ func (s inMemoryRouteStore) Delete(id string) error {
 	return nil
 }
 
-func Build(stations []station) (route, error) {
+func (b inMemoryRouteBuilder) Build(stations []station) (route, error) {
 	// TODO: Implement
 	return route{}, errors.New("TODO: This is complicated :)")
 }
