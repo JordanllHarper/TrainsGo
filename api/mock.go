@@ -6,10 +6,10 @@ func setupMock() dependencies {
 
 	stationOne := station{
 		Name: "stationOne",
-		Platforms: map[int]bool{
-			1: true,
-			2: true,
-			3: true,
+		Platforms: map[int]struct{}{
+			1: {},
+			2: {},
+			3: {},
 		},
 		Neighbors: []string{
 			"stationTwo",
@@ -17,9 +17,9 @@ func setupMock() dependencies {
 	}
 	stationTwo := station{
 		Name: "stationTwo",
-		Platforms: map[int]bool{
-			1: true,
-			2: true,
+		Platforms: map[int]struct{}{
+			1: {},
+			2: {},
 		},
 		Neighbors: []string{
 			"stationOne",
@@ -49,10 +49,8 @@ func setupMock() dependencies {
 		},
 	}
 	// NOTE: Mocking this might include setting up defined routes already :D
-	rb := inMemoryRouteBuilder{}
 	return dependencies{
 		ss: ss,
 		rs: rs,
-		rb: rb,
 	}
 }

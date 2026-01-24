@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"log"
 	"maps"
 	"net/http"
 	"slices"
@@ -16,19 +15,17 @@ func handleGetStations(s stationReader) http.HandlerFunc {
 			Neighbors []string `json:"neighbors"`
 		}
 
-		mapToDto := func(st station) responseDto {
-			platforms := slices.Sorted(maps.Keys(st.Platforms))
-			return responseDto{
-				Name:      st.Name,
-				Platforms: platforms,
-				Neighbors: st.Neighbors,
-			}
-		}
 		allStations, err := s.ReadAll()
 		dtos := []responseDto{}
 
 		for _, st := range allStations {
-			dtos = append(dtos, mapToDto(st))
+
+			platforms := slices.Sorted(maps.Keys(st.Platforms))
+			dtos = append(dtos, responseDto{
+				Name:      st.Name,
+				Platforms: platforms,
+				Neighbors: st.Neighbors,
+			})
 		}
 
 		if err != nil {
@@ -36,9 +33,7 @@ func handleGetStations(s stationReader) http.HandlerFunc {
 			return
 		}
 
-		if err := writeJsonToHttpOk(w, dtos); err != nil {
-			log.Println(err)
-		}
+		writeJsonToHttpOk(w, dtos)
 	}
 }
 
@@ -50,17 +45,9 @@ func handleGetStationByName(s stationReader) http.HandlerFunc {
 			Neighbors []string `json:"neighbors"`
 		}
 
-		mapToDto := func(st station) responseDto {
-			platforms := slices.Sorted(maps.Keys(st.Platforms))
-			return responseDto{
-				Name:      st.Name,
-				Platforms: platforms,
-				Neighbors: st.Neighbors,
-			}
-		}
 		name := r.PathValue("name")
 		if stringIsEmpty(name) {
-			badRequest(w, errors.New("Missing name path parameter"))
+			badRequestMsg(w, "Missing name path parameter")
 			return
 		}
 
@@ -75,11 +62,14 @@ func handleGetStationByName(s stationReader) http.HandlerFunc {
 			return
 		}
 
-		dto := mapToDto(st)
-
-		if err := writeJsonToHttpOk(w, dto); err != nil {
-			log.Println(err)
+		platforms := slices.Sorted(maps.Keys(st.Platforms))
+		dto := responseDto{
+			Name:      st.Name,
+			Platforms: platforms,
+			Neighbors: st.Neighbors,
 		}
+
+		writeJsonToHttpOk(w, dto)
 	}
 }
 
@@ -89,45 +79,41 @@ func handlePostStations(s stationStore) http.HandlerFunc {
 		Platforms []int    `json:"platforms"`
 		Neighbors []string `json:"neighbors"`
 	}
-	validate := func(dto requestDto) (station, error) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var dto requestDto
+		if err := jsonDecode(r.Body, &dto); err != nil {
+			badRequestMsg(w, "Invalid json")
+			return
+		}
 		if stringIsNilOrEmpty(dto.Name) {
-			return station{}, errors.New("Invalid Station Name")
+			badRequestMsg(w, "Invalid Station Name")
+			return
 		}
 
 		if dto.Platforms == nil {
-			return station{}, errors.New("Invalid Station Platforms")
+			badRequestMsg(w, "Invalid Station Platforms")
+			return
 		}
 
 		if dto.Neighbors == nil {
-			return station{}, errors.New("Invalid Station Neighbors")
+			badRequestMsg(w, "Invalid Station Neighbors")
+			return
 		}
 
-		platforms := map[int]bool{}
+		platforms := map[int]struct{}{}
 		for _, v := range dto.Platforms {
-			platforms[v] = true
+			platforms[v] = struct{}{}
 		}
 
-		return station{
+		st := station{
 			Name:      *dto.Name,
 			Platforms: platforms,
 			Neighbors: dto.Neighbors,
-		}, nil
+		}
 
-	}
-	return func(w http.ResponseWriter, r *http.Request) {
-		var reqDto requestDto
-		if err := jsonDecode(r.Body, &reqDto); err != nil {
-			badRequest(w, err)
-			return
-		}
-		st, err := validate(reqDto)
-		if err != nil {
-			badRequest(w, err)
-			return
-		}
-		exists, _, err := s.ReadByName(st.Name)
+		exists, _, err := s.ReadByName(*dto.Name)
 		if exists {
-			badRequest(w, errors.New("Already exists"))
+			badRequestMsg(w, "Already exists")
 			return
 		}
 		if err != nil {
@@ -138,9 +124,7 @@ func handlePostStations(s stationStore) http.HandlerFunc {
 			serverError(w, err)
 			return
 		}
-		if err := writeJsonToHttp(w, http.StatusCreated, reqDto); err != nil {
-			log.Println(err)
-		}
+		writeJsonToHttp(w, http.StatusCreated, dto)
 	}
 }
 
@@ -148,26 +132,6 @@ func handlePutStations(s stationWriter) http.HandlerFunc {
 	type requestDto struct {
 		Platforms []int    `json:"platforms"`
 		Neighbors []string `json:"neighbors"`
-	}
-	validate := func(name string, dto requestDto) (station, error) {
-		if dto.Platforms == nil {
-			return station{}, errors.New("Invalid Station Platforms")
-		}
-
-		if dto.Neighbors == nil {
-			return station{}, errors.New("Invalid Station Neighbors")
-		}
-
-		platforms := map[int]bool{}
-		for _, v := range dto.Platforms {
-			platforms[v] = true
-		}
-		return station{
-			Name:      name,
-			Platforms: platforms,
-			Neighbors: dto.Neighbors,
-		}, nil
-
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
@@ -181,10 +145,23 @@ func handlePutStations(s stationWriter) http.HandlerFunc {
 			return
 		}
 
-		st, err := validate(name, dto)
-		if err != nil {
-			badRequest(w, err)
+		if dto.Platforms == nil {
+			badRequestMsg(w, "Invalid Station Platforms")
+		}
+
+		if dto.Neighbors == nil {
+			badRequestMsg(w, "Invalid Station Neighbors")
 			return
+		}
+
+		platforms := map[int]struct{}{}
+		for _, v := range dto.Platforms {
+			platforms[v] = struct{}{}
+		}
+		st := station{
+			Name:      name,
+			Platforms: platforms,
+			Neighbors: dto.Neighbors,
 		}
 
 		isUpdate, err := s.Upsert(st)
@@ -196,9 +173,8 @@ func handlePutStations(s stationWriter) http.HandlerFunc {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		if err := writeJsonToHttp(w, http.StatusCreated, st); err != nil {
-			log.Println(err)
-		}
+
+		writeJsonToHttp(w, http.StatusCreated, st)
 	}
 }
 

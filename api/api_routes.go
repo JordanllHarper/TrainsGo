@@ -5,13 +5,12 @@ import "net/http"
 type dependencies struct {
 	ss stationStore
 	rs routeStore
-	rb routeBuilder
 }
 
 func setup(d dependencies) http.Handler {
 	mux := http.NewServeMux()
 	handler := setupStationRoutes(mux, d.ss)
-	handler = setupRouteRoutes(mux, d.rs, d.ss, d.rb)
+	handler = setupRouteRoutes(mux, d.rs, d.ss)
 	handler = addLogging(handler)
 	return handler
 }
@@ -25,9 +24,9 @@ func setupStationRoutes(mux *http.ServeMux, ss stationStore) http.Handler {
 	return mux
 }
 
-func setupRouteRoutes(mux *http.ServeMux, rs routeStore, ss stationStore, rb routeBuilder) http.Handler {
+func setupRouteRoutes(mux *http.ServeMux, rs routeStore, ss stationStore) http.Handler {
 	mux.HandleFunc("GET /routes", handleGetRoutes(rs))
-	mux.HandleFunc("POST /routes", handlePostRoute(ss, rs, rb))
+	mux.HandleFunc("POST /routes", handlePostRoute(ss, rs))
 	mux.HandleFunc("GET /routes/{id}", handleGetRouteById(rs))
 	mux.HandleFunc("DELETE /routes/{id}", handleDeleteRoute(rs))
 	return mux

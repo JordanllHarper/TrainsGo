@@ -1,8 +1,6 @@
 package main
 
 import (
-	"errors"
-	"log"
 	"maps"
 	"net/http"
 	"slices"
@@ -16,14 +14,7 @@ func handleGetRoutes(s routeReader) http.HandlerFunc {
 			return
 		}
 
-		if err != nil {
-			serverError(w, err)
-			return
-		}
-
-		if err := writeJsonToHttpOk(w, allRoutes); err != nil {
-			log.Println(err)
-		}
+		writeJsonToHttpOk(w, allRoutes)
 	}
 }
 
@@ -31,28 +22,26 @@ func handleGetRouteById(s routeReader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		if stringIsEmpty(id) {
-			badRequest(w, errors.New("Missing id path parameter"))
+			badRequestMsg(w, "Missing id path parameter")
 			return
 		}
 
 		exists, route, err := s.ReadById(id)
-		if !exists {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
 		if err != nil {
 			serverError(w, err)
 			return
 		}
 
-		if err := writeJsonToHttpOk(w, route); err != nil {
-			log.Println(err)
+		if !exists {
+			w.WriteHeader(http.StatusNotFound)
+			return
 		}
+
+		writeJsonToHttpOk(w, route)
 	}
 }
 
-func handlePostRoute(s stationStore, rs routeStore, rb routeBuilder) http.HandlerFunc {
+func handlePostRoute(s stationStore, rs routeStore) http.HandlerFunc {
 	type requestDto struct {
 		requiredStations map[int]string
 	}
@@ -61,34 +50,29 @@ func handlePostRoute(s stationStore, rs routeStore, rb routeBuilder) http.Handle
 		StartStation station `json:"startStation"`
 		EndStation   station `json:"endStation"`
 	}
-	validateInput := func(dto requestDto) error {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var dto requestDto
+		if err := jsonDecode(r.Body, &dto); err != nil {
+			badRequest(w, err)
+			return
+		}
+
 		if dto.requiredStations == nil {
-			return errors.New("Missing required stations")
+			badRequestMsg(w, "Missing required stations")
+			return
 		}
 
 		if len(dto.requiredStations) < 2 {
-			return errors.New("Required stations list too small. 2 required")
-		}
-
-		return nil
-	}
-	return func(w http.ResponseWriter, r *http.Request) {
-		var reqDto requestDto
-		if err := jsonDecode(r.Body, &reqDto); err != nil {
-			badRequest(w, err)
-			return
-		}
-		err := validateInput(reqDto)
-		if err != nil {
-			badRequest(w, err)
+			badRequestMsg(w, "Required stations list too small. 2 required")
 			return
 		}
 
-		order := slices.Collect(maps.Keys(reqDto.requiredStations))
+		order := slices.Collect(maps.Keys(dto.requiredStations))
 		slices.Sort(order)
+
 		orderedStations := []string{}
 		for _, k := range order {
-			orderedStations = append(orderedStations, reqDto.requiredStations[k])
+			orderedStations = append(orderedStations, dto.requiredStations[k])
 		}
 
 		validNames, stations, err := s.ReadMany(orderedStations)
@@ -98,10 +82,10 @@ func handlePostRoute(s stationStore, rs routeStore, rb routeBuilder) http.Handle
 		}
 
 		if !validNames {
-			badRequest(w, errors.New("Invalid provided names"))
+			badRequestMsg(w, "Invalid provided names")
 			return
 		}
-		route, err := rb.Build(stations)
+		route, err := buildRoutes(stations)
 		if err != nil {
 			serverError(w, err)
 			return
@@ -112,9 +96,7 @@ func handlePostRoute(s stationStore, rs routeStore, rb routeBuilder) http.Handle
 			return
 		}
 
-		if err := writeJsonToHttp(w, http.StatusCreated, route); err != nil {
-			log.Println(err)
-		}
+		writeJsonToHttp(w, http.StatusCreated, route)
 	}
 }
 
@@ -122,7 +104,7 @@ func handleDeleteRoute(s routeWriter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		if stringIsEmpty(id) {
-			badRequest(w, errors.New("Missing name path parameter"))
+			badRequestMsg(w, "Missing name path parameter")
 			return
 		}
 		if err := s.Delete(id); err != nil {
