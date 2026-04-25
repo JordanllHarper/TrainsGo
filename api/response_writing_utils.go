@@ -12,18 +12,19 @@ func writeJsonToHttp(w http.ResponseWriter, statusCode int, v any) {
 		log.Println(err)
 	}
 }
+
+func writeJsonToHttpCreated(w http.ResponseWriter, location string, v any) {
+	w.Header().Add("Location", location)
+	writeJsonToHttp(w, http.StatusCreated, v)
+}
 func writeJsonToHttpOk(w http.ResponseWriter, v any) {
 	writeJsonToHttp(w, http.StatusOK, v)
 }
 
-func serverError(w http.ResponseWriter, err error) {
+func internalServerError(w http.ResponseWriter, err error) {
 	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
 
 func badRequest(w http.ResponseWriter, err error) {
 	http.Error(w, err.Error(), http.StatusBadRequest)
-}
-
-func badRequestMsg(w http.ResponseWriter, errMsg string) {
-	http.Error(w, errMsg, http.StatusBadRequest)
 }

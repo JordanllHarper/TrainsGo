@@ -3,31 +3,26 @@ package main
 import "net/http"
 
 type dependencies struct {
-	ss stationStore
-	rs routeStore
+	ts trainStore
 }
 
-func setup(d dependencies) http.Handler {
+func setup(d dependencies, srvBase string) http.Handler {
 	mux := http.NewServeMux()
-	handler := setupStationRoutes(mux, d.ss)
-	handler = setupRouteRoutes(mux, d.rs, d.ss)
+	handler := setupTrainRoutes(mux, d.ts, srvBase)
 	handler = addLogging(handler)
 	return handler
 }
 
-func setupStationRoutes(mux *http.ServeMux, ss stationStore) http.Handler {
-	mux.HandleFunc("GET /stations", handleGetStations(ss))
-	mux.HandleFunc("GET /stations/{name}", handleGetStationByName(ss))
-	mux.HandleFunc("POST /stations", handlePostStations(ss))
-	mux.HandleFunc("PUT /stations/{name}", handlePutStations(ss))
-	mux.HandleFunc("DELETE /stations/{name}", handleDeleteStations(ss))
-	return mux
-}
+func setupTrainRoutes(
+	mux *http.ServeMux,
+	ts trainStore,
+	srvBase string,
+) http.Handler {
 
-func setupRouteRoutes(mux *http.ServeMux, rs routeStore, ss stationStore) http.Handler {
-	mux.HandleFunc("GET /routes", handleGetRoutes(rs))
-	mux.HandleFunc("POST /routes", handlePostRoute(ss, rs))
-	mux.HandleFunc("GET /routes/{id}", handleGetRouteById(rs))
-	mux.HandleFunc("DELETE /routes/{id}", handleDeleteRoute(rs))
+	mux.HandleFunc(getTrains, HandleGetTrains(ts))
+	mux.HandleFunc(getTrainByRef, HandleGetTrainByRef(ts))
+	mux.HandleFunc(postTrain, HandlePostTrain(ts, srvBase))
+	mux.HandleFunc(patchTrain, HandlePatchTrain(ts))
+
 	return mux
 }
