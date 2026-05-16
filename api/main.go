@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"net/http"
+
+	"github.com/JordanllHarper/trainsgo/shared"
 )
 
 func main() {
@@ -12,8 +14,13 @@ func main() {
 	log.Println("START:::Listening at", addr)
 	log.Fatalln(http.ListenAndServe(addr, handler))
 }
+
 func setupMock() dependencies {
 	return dependencies{
-		ts: inMemTrainStore{},
+		ts: inMemTrainStore{
+			"test": shared.Train{
+				Ref: "test",
+			},
+		},
 	}
 }

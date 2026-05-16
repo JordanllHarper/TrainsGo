@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/JordanllHarper/trainsgo/shared"
 )
 
 var (
@@ -52,7 +54,7 @@ const postTrain = "POST /trains"
 
 func HandlePostTrain(ts trainGetUpdater, srvBase string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var t Train
+		var t shared.Train
 		if err := jsonDecode(r.Body, &t); err != nil {
 			badRequest(w, err)
 			return
@@ -80,12 +82,6 @@ func HandlePostTrain(ts trainGetUpdater, srvBase string) http.HandlerFunc {
 	}
 }
 
-type PatchTrainRequest struct {
-	Description *string `json:"description"`
-	PosX        *int    `json:"posX"`
-	PosY        *int    `json:"posY"`
-}
-
 const patchTrain = "PATCH /trains/{ref}"
 
 func HandlePatchTrain(ts trainGetUpdater) http.HandlerFunc {
@@ -96,8 +92,8 @@ func HandlePatchTrain(ts trainGetUpdater) http.HandlerFunc {
 			return
 		}
 
-		var req PatchTrainRequest
-		if err := jsonDecode(r.Body, req); err != nil {
+		var req shared.PatchTrainRequest
+		if err := jsonDecode(r.Body, &req); err != nil {
 			badRequest(w, err)
 			return
 		}

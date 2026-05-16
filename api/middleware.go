@@ -31,12 +31,12 @@ func addLogging(next http.Handler) http.Handler {
 			loggingWriter := NewLoggingResponseWriter(w)
 			method := r.Method
 			pathVal := r.URL.Path
-			log.Printf("%s request to %s\n", method, pathVal)
+			log.Printf("%s request ==> %s\n", method, pathVal)
 			next.ServeHTTP(loggingWriter, r)
 			if loggingWriter.statusCode >= 400 {
 				log.Printf("%d response from %s - %s\n", loggingWriter.statusCode, pathVal, string(loggingWriter.buf))
 				return
 			}
-			log.Printf("%d response from %s\n", loggingWriter.statusCode, pathVal)
+			log.Printf("%d response <== %s\n", loggingWriter.statusCode, pathVal)
 		})
 }

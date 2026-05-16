@@ -4,16 +4,11 @@ import (
 	"errors"
 	"maps"
 	"slices"
+
+	"github.com/JordanllHarper/trainsgo/shared"
 )
 
 type (
-	Train struct {
-		Ref         string `json:"ref"`
-		Description string `json:"description"`
-		PosX        int    `json:"posX"`
-		PosY        int    `json:"posY"`
-	}
-
 	trainStore interface {
 		trainGetter
 		trainDeleter
@@ -30,27 +25,27 @@ type (
 	}
 
 	trainUpdater interface {
-		UpsertTrain(t Train) (exists bool, err error)
+		UpsertTrain(t shared.Train) (exists bool, err error)
 	}
 
 	trainGetter interface {
-		GetTrains() ([]Train, error)
-		GetTrainByRef(ref string) (exists bool, t Train, err error)
+		GetTrains() ([]shared.Train, error)
+		GetTrainByRef(ref string) (exists bool, t shared.Train, err error)
 	}
 
-	inMemTrainStore map[string]Train
+	inMemTrainStore map[string]shared.Train
 )
 
-func (ts inMemTrainStore) GetTrains() ([]Train, error) {
+func (ts inMemTrainStore) GetTrains() ([]shared.Train, error) {
 	return slices.Collect(maps.Values(ts)), nil
 }
 
-func (ts inMemTrainStore) GetTrainByRef(ref string) (exists bool, t Train, err error) {
+func (ts inMemTrainStore) GetTrainByRef(ref string) (exists bool, t shared.Train, err error) {
 	t, exists = ts[ref]
 	return exists, t, nil
 }
 
-func (ts inMemTrainStore) UpsertTrain(t Train) (exists bool, err error) {
+func (ts inMemTrainStore) UpsertTrain(t shared.Train) (exists bool, err error) {
 	if t.Ref == "" {
 		return false, errors.New("Invalid empty ref")
 	}

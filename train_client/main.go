@@ -1,0 +1,181 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/JordanllHarper/trainsgo/shared"
+)
+
+type state int
+
+const addr = "http://localhost:8080"
+
+const (
+	moving state = iota
+	ended
+)
+
+type (
+	trainInfo struct {
+		key,
+		ref string
+	}
+
+	pos struct {
+		posX, posY int
+	}
+
+	getPos func(currentPos, endPos pos) pos
+)
+
+func parsePos(x, y string) (pos, error) {
+	xInt, err := strconv.Atoi(x)
+	if err != nil {
+		return pos{}, errors.Join(errors.New("invalid x"), err)
+	}
+	yInt, err := strconv.Atoi(y)
+	if err != nil {
+		return pos{}, errors.Join(errors.New("invalid y"), err)
+	}
+	return pos{xInt, yInt}, nil
+}
+
+const errorMessage = `Invalid number of arguments - need:
+startX startY
+endX endY
+ref and key`
+const requiredNumArgs = 6
+
+func main() {
+
+	updateTime := flag.Int("update", 250, "Milliseconds before an update")
+	movementInc := flag.Int("inc", 1, "how many coordinates to move every update")
+	flag.Parse()
+
+	args := flag.Args()
+	if len(args) != requiredNumArgs {
+		log.Fatalln(errorMessage)
+	}
+	startX, startY := args[0], args[1]
+	endX, endY := args[2], args[3]
+	key, ref := args[4], args[5]
+	startPos, err := parsePos(startX, startY)
+	if err != nil {
+		log.Fatalln("Error parsing start position:", err)
+	}
+	endPos, err := parsePos(endX, endY)
+	if err != nil {
+		log.Fatalln("Error parsing end position:", err)
+	}
+
+	tr := trainInfo{key: key, ref: ref}
+
+	dur := time.Millisecond * (time.Duration(*updateTime))
+
+	posCh := make(chan pos)
+	go travel(startPos, endPos, mockMovPos(*movementInc), dur, posCh)
+	listenForUpdates(http.DefaultClient, posCh, tr)
+}
+
+func listenForUpdates(c *http.Client, posCh chan pos, t trainInfo) {
+	for p := range posCh {
+		b, err := getUpdateBody(p)
+		if err != nil {
+			log.Fatalf("Error updating position: %s", err)
+		}
+		sendUpdate(*c, b, addr, t)
+	}
+}
+
+func getUpdateBody(p pos) (*bytes.Reader, error) {
+	req := shared.PatchTrainRequest{
+		PosX: &p.posX, PosY: &p.posY,
+	}
+	b, err := json.Marshal(req)
+	if err != nil {
+		return &bytes.Reader{}, err
+	}
+	return bytes.NewReader(b), nil
+}
+
+func travel(
+	startPos, endPos pos,
+	getPosFunc getPos,
+	updDur time.Duration,
+	posCh chan pos,
+) {
+	currentPos := startPos
+	currentState := moving
+
+	for {
+		switch currentState {
+		case moving:
+			posCh <- currentPos
+			currentPos = getPosFunc(currentPos, endPos)
+			if currentPos == endPos {
+				currentState = ended
+			}
+			time.Sleep(updDur)
+		case ended:
+			posCh <- currentPos
+			fmt.Println("Ended")
+			close(posCh)
+			return
+		default:
+			panic(fmt.Sprintf("unexpected main.state: %#v", currentState))
+		}
+	}
+}
+
+func mockMovPos(inc int) getPos {
+	return func(currentPos, endPos pos) pos {
+		move := func(src, dest int) int {
+			if src < dest && dest-src > inc {
+				src += inc
+			} else if src > dest && src-dest > inc {
+				src -= inc
+			} else {
+				src = dest
+			}
+			return src
+		}
+		if currentPos.posX != endPos.posX {
+			currentPos.posX = move(currentPos.posX, endPos.posX)
+		}
+
+		if currentPos.posY != endPos.posY {
+			currentPos.posY = move(currentPos.posY, endPos.posY)
+		}
+		return currentPos
+	}
+}
+
+func sendUpdate(c http.Client, body io.Reader, addr string, t trainInfo) error {
+	req, err := http.NewRequest(
+		http.MethodPatch,
+		fmt.Sprintf("%s/trains/%s", addr, t.ref),
+		body,
+	)
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Authorization", t.key)
+	res, err := c.Do(req)
+	if err != nil {
+		return err
+	}
+	var tr shared.Train
+	if err := json.NewDecoder(res.Body).Decode(&tr); err != nil {
+		return err
+	}
+	fmt.Println("Res Body:", tr)
+
+	return nil
+}

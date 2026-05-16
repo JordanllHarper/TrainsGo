@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"slices"
 	"testing"
+
+	"github.com/JordanllHarper/trainsgo/shared"
 )
 
 func TestHandleGetTrains(t *testing.T) {
@@ -14,7 +16,7 @@ func TestHandleGetTrains(t *testing.T) {
 		name string // description of this test case
 		// Named input parameters for target function.
 		ts   trainStore
-		want []Train
+		want []shared.Train
 	}{
 		{
 			"Populated train store returns array of trains",
@@ -26,7 +28,7 @@ func TestHandleGetTrains(t *testing.T) {
 					PosY:        0,
 				},
 			},
-			[]Train{
+			[]shared.Train{
 				{
 					Ref:         "f5d2892a-d872-4520-84b0-6e20aae7c776",
 					Description: "test1",
@@ -39,7 +41,7 @@ func TestHandleGetTrains(t *testing.T) {
 		{
 			"Empty train store returns empty array",
 			inMemTrainStore{},
-			[]Train{},
+			[]shared.Train{},
 			// TODO: Add test cases.
 		},
 	}
@@ -53,7 +55,7 @@ func TestHandleGetTrains(t *testing.T) {
 				t.Fatal(err)
 			}
 			handler(recorder, req)
-			var result []Train
+			var result []shared.Train
 			if err = jsonDecode(recorder.Body, &result); err != nil {
 				t.Fatal(err)
 			}
@@ -71,7 +73,7 @@ func TestHandleGetTrainByRef(t *testing.T) {
 		ts             trainStore
 		wantStatusCode int
 		wantTrainBody  bool
-		wantTrain      Train
+		wantTrain      shared.Train
 	}{
 		{
 			"Populated train store returns matching train",
@@ -85,7 +87,7 @@ func TestHandleGetTrainByRef(t *testing.T) {
 			},
 			http.StatusOK,
 			true,
-			Train{
+			shared.Train{
 				Ref:         "f5d2892a-d872-4520-84b0-6e20aae7c776",
 				Description: "test1",
 				PosX:        0,
@@ -97,7 +99,7 @@ func TestHandleGetTrainByRef(t *testing.T) {
 			inMemTrainStore{},
 			http.StatusNotFound,
 			false,
-			Train{},
+			shared.Train{},
 		},
 		{
 			"Populated train store with no item with ref returns not found",
@@ -111,7 +113,7 @@ func TestHandleGetTrainByRef(t *testing.T) {
 			},
 			http.StatusNotFound,
 			false,
-			Train{},
+			shared.Train{},
 		},
 	}
 	for _, tt := range tests {
@@ -129,7 +131,7 @@ func TestHandleGetTrainByRef(t *testing.T) {
 				t.Errorf("HandleGetTrainByRef() status code = %v, want %v", recorder.Code, tt.wantStatusCode)
 			}
 			if tt.wantTrainBody {
-				var result Train
+				var result shared.Train
 				if err = jsonDecode(recorder.Body, &result); err != nil {
 					t.Fatal(err)
 				}
@@ -148,7 +150,7 @@ func TestHandlePostTrain(t *testing.T) {
 		ts             trainStore
 		wantStatusCode int
 		wantTrainBody  bool
-		wantTrain      Train
+		wantTrain      shared.Train
 		wantLocation   string
 	}{
 		{
@@ -163,7 +165,7 @@ func TestHandlePostTrain(t *testing.T) {
 			},
 			http.StatusConflict,
 			false,
-			Train{},
+			shared.Train{},
 			"",
 		},
 		{
@@ -171,7 +173,7 @@ func TestHandlePostTrain(t *testing.T) {
 			inMemTrainStore{},
 			http.StatusCreated,
 			true,
-			Train{
+			shared.Train{
 				Ref:         "f5d2892a-d872-4520-84b0-6e20aae7c776",
 				Description: "test1",
 				PosX:        0,
@@ -184,7 +186,7 @@ func TestHandlePostTrain(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			handler := HandlePostTrain(tt.ts, "test")
-			train := Train{
+			train := shared.Train{
 				Ref:         "f5d2892a-d872-4520-84b0-6e20aae7c776",
 				Description: "test1",
 				PosX:        0,
@@ -204,7 +206,7 @@ func TestHandlePostTrain(t *testing.T) {
 				t.Errorf("HandlePostTrain() status code = %v, want %v", recorder.Code, tt.wantStatusCode)
 			}
 			if tt.wantTrainBody {
-				var result Train
+				var result shared.Train
 				if err = jsonDecode(recorder.Body, &result); err != nil {
 					t.Fatal(err)
 				}

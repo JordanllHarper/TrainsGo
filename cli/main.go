@@ -2,174 +2,68 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
-	"strings"
-)
 
-const (
-	listStation   = "ls"
-	newStation    = "ns"
-	deleteStation = "ds"
-	newRoute      = "nr"
-	help          = "h"
-	quit          = "q"
+	"github.com/JordanllHarper/trainsgo/shared"
 )
-
-const url = "http://localhost:8080"
 
 type (
-	postStationRequest struct {
-		Name      string   `json:"name"`
-		Platforms []int    `json:"platforms"`
-		Neighbors []string `json:"neighbors"`
+	opFunc  func()
+	handler struct {
+		helpText string
+		f        opFunc
 	}
-
-	getStationResponse struct {
-		Name      string   `json:"name"`
-		Platforms []int    `json:"platforms"`
-		Neighbors []string `json:"neighbors"`
-	}
+	handlers map[string]handler
 )
 
-func showHelp() {
-	printCommand(listStation, "list created stations")
-	printCommand(newStation, "create new station")
-	printCommand(deleteStation, "delete station")
-	printCommand(newRoute, "create new route between stations")
-	printCommand(help, "delete new station")
-	printCommand(quit, "create new route between stations")
+func getTrains(c http.Client, baseUrl string) []shared.Train {
+	res, err := c.Get(fmt.Sprintf("%s/trains", baseUrl))
+	if err != nil {
+		panic(err)
+	}
+	var trains []shared.Train
+	if err := json.NewDecoder(res.Body).Decode(&trains); err != nil {
+		panic(err)
+	}
+	return trains
 }
 
 func main() {
-	fmt.Println("Started: ")
-	showHelp()
-	scanner := bufio.NewScanner(os.Stdin)
+	baseUrl := "http://127.0.0.1:8080"
+	c := http.Client{}
+	s := bufio.NewScanner(os.Stdin)
+	handlers := map[string](handler){
+		"gt": handler{"[g]et [t]rains", func() {
+			trains := getTrains(c, baseUrl)
+			for _, v := range trains {
+				fmt.Println(v)
+			}
+		}},
+	}
+	fmt.Println("Started")
+	printHelp(handlers)
 	for {
-		scanner.Scan()
-		err := scanner.Err()
-		if mustNotBeErr(err) {
+		text := scanAndReadText(s)
+		handler, exists := handlers[text]
+		if !exists {
+			fmt.Println("Invalid command, please type one of the following options")
+			printHelp(handlers)
 			continue
 		}
-		s := scanner.Text()
-		switch s {
-		case help:
-			showHelp()
-		case quit:
-			fmt.Println("Quitting...")
-			return
-		case listStation:
-			handleListStations()
-		case newStation:
-			handleNewStation(*scanner)
-		case deleteStation:
-			handleDeleteStation(*scanner)
-		default:
-			fmt.Println("Unrecognised command:", s)
-		}
+		handler.f()
 	}
 }
 
-func mustNotBeErr(err error) bool {
-	if err != nil {
-		fmt.Println("Error:", err)
-		return true
-	}
-	return false
-}
-
-func getPath(path string) string { return url + path }
-
-func handleDeleteStation(s bufio.Scanner) {
-	fmt.Println("Name to delete")
+func scanAndReadText(s *bufio.Scanner) string {
 	s.Scan()
-	if mustNotBeErr(s.Err()) {
-		return
-	}
-	name := s.Text()
-	client := http.DefaultClient
-
-	req, err := http.NewRequest("DELETE", getPath("/stations/")+name, nil)
-
-	resp, err := client.Do(req)
-	if mustNotBeErr(err) {
-		return
-	}
-	fmt.Println("Status code:", resp.StatusCode)
+	return s.Text()
 }
 
-func handleNewStation(scanner bufio.Scanner) {
-	fmt.Println("Name:")
-	scanner.Scan()
-	if mustNotBeErr(scanner.Err()) {
-		return
+func printHelp(h handlers) {
+	for k, v := range h {
+		fmt.Println(k, "=>", v.helpText)
 	}
-	name := scanner.Text()
-	fmt.Println("Num of platforms:")
-
-	scanner.Scan()
-	if mustNotBeErr(scanner.Err()) {
-		return
-	}
-	numPlatformsInput := scanner.Text()
-	numPlatforms, err := strconv.Atoi(numPlatformsInput)
-	if mustNotBeErr(err) {
-		return
-	}
-	platforms := []int{}
-	for i := range numPlatforms {
-		platforms = append(platforms, i)
-	}
-
-	fmt.Println("Neighbors")
-	scanner.Scan()
-	if mustNotBeErr(scanner.Err()) {
-		return
-	}
-	// neighbor1 neighbor2
-	neighborsInput := scanner.Text()
-	neighbors := strings.Split(neighborsInput, ":")
-	st := postStationRequest{
-		Name:      name,
-		Platforms: platforms,
-		Neighbors: neighbors,
-	}
-
-	json, err := json.Marshal(st)
-	if mustNotBeErr(err) {
-		return
-	}
-
-	resp, err := http.Post(getPath("/stations"), "application/json", bytes.NewReader(json))
-	if mustNotBeErr(err) {
-		return
-	}
-	fmt.Println("Response:", resp.StatusCode)
-}
-
-func handleListStations() {
-	resp, err := http.Get(getPath("/stations"))
-	if mustNotBeErr(err) {
-		return
-	}
-	fmt.Println("Status code:", resp.StatusCode)
-
-	var stations []getStationResponse
-	err = json.NewDecoder(resp.Body).Decode(&stations)
-	if mustNotBeErr(err) {
-		return
-	}
-	fmt.Println("Stations:")
-	fmt.Println("Name | Station | Platform")
-	for _, v := range stations {
-		fmt.Println(v.Name, v.Neighbors, v.Platforms)
-	}
-}
-
-func printCommand(cmd string, desc string) {
-	fmt.Printf("%s - %s\n", cmd, desc)
 }
