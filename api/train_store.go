@@ -4,14 +4,21 @@ import (
 	"errors"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/JordanllHarper/trainsgo/shared"
+)
+
+var (
+	errorEmptyRef      = errors.New("invalid empty ref")
+	errorAlreadyExists = errors.New("train already exists")
 )
 
 type (
 	trainStore interface {
 		trainGetter
 		trainDeleter
+		trainCreater
 		trainUpdater
 	}
 
@@ -22,6 +29,10 @@ type (
 
 	trainDeleter interface {
 		DeleteTrain(ref string) error
+	}
+
+	trainCreater interface {
+		CreateTrain(t shared.Train) error
 	}
 
 	trainUpdater interface {
@@ -45,9 +56,20 @@ func (ts inMemTrainStore) GetTrainByRef(ref string) (exists bool, t shared.Train
 	return exists, t, nil
 }
 
+func (ts inMemTrainStore) CreateTrain(t shared.Train) error {
+	if strings.TrimSpace(t.Ref) == "" {
+		return errorEmptyRef
+	}
+	if _, exists := ts[t.Ref]; exists {
+		return errorAlreadyExists
+	}
+	ts[t.Ref] = t
+	return nil
+}
+
 func (ts inMemTrainStore) UpsertTrain(t shared.Train) (exists bool, err error) {
-	if t.Ref == "" {
-		return false, errors.New("Invalid empty ref")
+	if strings.TrimSpace(t.Ref) == "" {
+		return false, errorEmptyRef
 	}
 
 	_, exists = ts[t.Ref]

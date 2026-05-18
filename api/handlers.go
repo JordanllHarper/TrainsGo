@@ -8,17 +8,13 @@ import (
 	"github.com/JordanllHarper/trainsgo/shared"
 )
 
-var (
-	badRef = errors.New("Bad ref")
-)
-
 const getTrains = "GET /trains"
 
-func HandleGetTrains(ts trainGetter) http.HandlerFunc {
+func handleGetTrains(tg trainGetter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		trains, err := ts.GetTrains()
+		trains, err := tg.GetTrains()
 		if err != nil {
-			badRequest(w, err)
+			internalServerError(w, err)
 			return
 		}
 		writeJsonToHttpOk(w, trains)
@@ -27,15 +23,10 @@ func HandleGetTrains(ts trainGetter) http.HandlerFunc {
 
 const getTrainByRef = "GET /trains/{ref}"
 
-func HandleGetTrainByRef(ts trainGetter) http.HandlerFunc {
+func handleGetTrainByRef(tg trainGetter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ref := r.PathValue("ref")
-		if ref == "" {
-			badRequest(w, badRef)
-			return
-		}
-
-		exists, train, err := ts.GetTrainByRef(ref)
+		exists, train, err := tg.GetTrainByRef(ref)
 		if err != nil {
 			internalServerError(w, err)
 			return
@@ -52,7 +43,7 @@ func HandleGetTrainByRef(ts trainGetter) http.HandlerFunc {
 
 const postTrain = "POST /trains"
 
-func HandlePostTrain(ts trainGetUpdater, srvBase string) http.HandlerFunc {
+func handlePostTrain(tu trainCreater, srvBase string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var t shared.Train
 		if err := jsonDecode(r.Body, &t); err != nil {
@@ -60,37 +51,29 @@ func HandlePostTrain(ts trainGetUpdater, srvBase string) http.HandlerFunc {
 			return
 		}
 
-		exists, _, err := ts.GetTrainByRef(t.Ref)
-		if err != nil {
-			internalServerError(w, err)
+		switch err := tu.CreateTrain(t); {
+		case errors.Is(err, errorEmptyRef):
+			badRequest(w, err)
 			return
-		}
-
-		if exists {
+		case errors.Is(err, errorAlreadyExists):
 			http.Error(w, "Train with ref already exists", http.StatusConflict)
 			return
 		}
 
-		if _, err = ts.UpsertTrain(t); err != nil {
-			internalServerError(w, err)
-			return
-		}
-
-		location := fmt.Sprintf("%v/trains/%v", srvBase, t.Ref)
-
-		writeJsonToHttpCreated(w, location, t)
+		writeJsonToHttpCreated(
+			w,
+			fmt.Sprintf("%v/trains/%v", srvBase, t.Ref),
+			t,
+		)
 	}
 }
 
 const patchTrain = "PATCH /trains/{ref}"
 
-func HandlePatchTrain(ts trainGetUpdater) http.HandlerFunc {
+func handlePatchTrain(tgu trainGetUpdater, sv secretVerifier) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
 		ref := r.PathValue("ref")
-		if ref == "" {
-			badRequest(w, badRef)
-			return
-		}
 
 		var req shared.PatchTrainRequest
 		if err := jsonDecode(r.Body, &req); err != nil {
@@ -98,14 +81,25 @@ func HandlePatchTrain(ts trainGetUpdater) http.HandlerFunc {
 			return
 		}
 
-		exists, t, err := ts.GetTrainByRef(ref)
+		exists, t, err := tgu.GetTrainByRef(ref)
 		if err != nil {
-			badRequest(w, badRef)
+			internalServerError(w, err)
 			return
 		}
 
 		if !exists {
 			http.NotFound(w, r)
+			return
+		}
+
+		valid, err := sv.Verify(ref, auth)
+		if err != nil {
+			internalServerError(w, err)
+			return
+		}
+
+		if !valid {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
@@ -121,7 +115,7 @@ func HandlePatchTrain(ts trainGetUpdater) http.HandlerFunc {
 			t.PosY = *req.PosY
 		}
 
-		if _, err := ts.UpsertTrain(t); err != nil {
+		if _, err := tgu.UpsertTrain(t); err != nil {
 			internalServerError(w, err)
 			return
 		}

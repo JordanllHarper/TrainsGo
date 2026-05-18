@@ -3,26 +3,27 @@ package main
 import "net/http"
 
 type dependencies struct {
-	ts trainStore
+	trainStore
+	secretVerifier
 }
 
 func setup(d dependencies, srvBase string) http.Handler {
 	mux := http.NewServeMux()
-	handler := setupTrainRoutes(mux, d.ts, srvBase)
+	handler := setupTrainRoutes(mux, d, srvBase)
 	handler = addLogging(handler)
 	return handler
 }
 
 func setupTrainRoutes(
 	mux *http.ServeMux,
-	ts trainStore,
+	d dependencies,
 	srvBase string,
 ) http.Handler {
 
-	mux.HandleFunc(getTrains, HandleGetTrains(ts))
-	mux.HandleFunc(getTrainByRef, HandleGetTrainByRef(ts))
-	mux.HandleFunc(postTrain, HandlePostTrain(ts, srvBase))
-	mux.HandleFunc(patchTrain, HandlePatchTrain(ts))
+	mux.HandleFunc(getTrains, handleGetTrains(d))
+	mux.HandleFunc(getTrainByRef, handleGetTrainByRef(d))
+	mux.HandleFunc(postTrain, handlePostTrain(d, srvBase))
+	mux.HandleFunc(patchTrain, addSecretValidation(handlePatchTrain(d, d)))
 
 	return mux
 }

@@ -22,7 +22,8 @@ func writeJsonToHttpOk(w http.ResponseWriter, v any) {
 }
 
 func internalServerError(w http.ResponseWriter, err error) {
-	http.Error(w, err.Error(), http.StatusInternalServerError)
+	log.Println("Error:", err)
+	http.Error(w, "Something went wrong", http.StatusInternalServerError)
 }
 
 func badRequest(w http.ResponseWriter, err error) {

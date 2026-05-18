@@ -6,7 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -33,8 +32,6 @@ type (
 	pos struct {
 		posX, posY int
 	}
-
-	getPos func(currentPos, endPos pos) pos
 )
 
 func parsePos(x, y string) (pos, error) {
@@ -85,11 +82,9 @@ func main() {
 	go mockTravel(startPos, endPos, *movementInc, dur, posCh)
 	for p := range posCh {
 		log.Printf("Received pos - X: %v Y: %v", p.posX, p.posY)
-		b, err := getUpdateBody(p)
-		if err != nil {
-			log.Fatalf("Error updating position: %s", err)
+		if err := sendHttpUpdate(p, addr, tr); err != nil {
+			log.Fatalln("Error sending http update:", err)
 		}
-		sendHttpUpdate(http.DefaultClient, b, addr, tr)
 	}
 	log.Println("Finished")
 }
@@ -153,7 +148,12 @@ func move(currentPos, endPos pos, inc int) pos {
 	return currentPos
 }
 
-func sendHttpUpdate(c *http.Client, body io.Reader, addr string, t trainInfo) error {
+func sendHttpUpdate(p pos, addr string, t trainInfo) error {
+	body, err := getUpdateBody(p)
+	if err != nil {
+		return fmt.Errorf("error getting update body: %w", err)
+	}
+
 	req, err := http.NewRequest(
 		http.MethodPatch,
 		fmt.Sprintf("%s/trains/%s", addr, t.ref),
@@ -161,13 +161,16 @@ func sendHttpUpdate(c *http.Client, body io.Reader, addr string, t trainInfo) er
 	)
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", t.key)
-	res, err := c.Do(req)
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("received %v status code", res.StatusCode)
+	}
 	var tr shared.Train
 	if err := json.NewDecoder(res.Body).Decode(&tr); err != nil {
-		return err
+		return fmt.Errorf("error decoding response: %w", err)
 	}
 
 	return nil

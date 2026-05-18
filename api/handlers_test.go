@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -11,107 +12,127 @@ import (
 	"github.com/JordanllHarper/trainsgo/shared"
 )
 
+type mockTrainGetter struct {
+	trains             []shared.Train
+	getTrainByRef      shared.Train
+	getTrainExists     bool
+	getTrainError      error
+	getTrainByRefError error
+}
+
+func (m mockTrainGetter) GetTrains() ([]shared.Train, error) {
+	return m.trains, m.getTrainError
+}
+func (m mockTrainGetter) GetTrainByRef(ref string) (exists bool, t shared.Train, err error) {
+	return m.getTrainExists, m.getTrainByRef, m.getTrainByRefError
+}
+
 func TestHandleGetTrains(t *testing.T) {
+	populatedTrains := []shared.Train{
+		{
+			Ref:         "f5d2892a-d872-4520-84b0-6e20aae7c776",
+			Description: "test1",
+			PosX:        0,
+			PosY:        0,
+		},
+	}
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
-		ts   trainStore
-		want []shared.Train
+		ts         trainGetter
+		want       []shared.Train
+		wantStatus int
+		wantBody   bool
 	}{
 		{
 			"Populated train store returns array of trains",
-			inMemTrainStore{
-				"f5d2892a-d872-4520-84b0-6e20aae7c776": {
-					Ref:         "f5d2892a-d872-4520-84b0-6e20aae7c776",
-					Description: "test1",
-					PosX:        0,
-					PosY:        0,
-				},
-			},
-			[]shared.Train{
-				{
-					Ref:         "f5d2892a-d872-4520-84b0-6e20aae7c776",
-					Description: "test1",
-					PosX:        0,
-					PosY:        0,
-				},
-			},
+			mockTrainGetter{trains: populatedTrains},
+			populatedTrains,
+			http.StatusOK,
+			true,
 		},
-
 		{
 			"Empty train store returns empty array",
-			inMemTrainStore{},
+			mockTrainGetter{},
 			[]shared.Train{},
-			// TODO: Add test cases.
+			http.StatusOK,
+			true,
+		},
+		{
+			"Internal error returns internal server error",
+			mockTrainGetter{getTrainError: errors.New("eek")},
+			[]shared.Train{},
+			http.StatusInternalServerError,
+			false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
-			handler := HandleGetTrains(tt.ts)
+			handler := handleGetTrains(tt.ts)
 
 			req, err := http.NewRequest("GET", "/trains", nil)
 			if err != nil {
 				t.Fatal(err)
 			}
 			handler(recorder, req)
-			var result []shared.Train
-			if err = jsonDecode(recorder.Body, &result); err != nil {
-				t.Fatal(err)
+			if recorder.Code != tt.wantStatus {
+				t.Errorf("HandleGetTrains() status code = %v, want %v", recorder.Code, tt.wantStatus)
 			}
-			if !slices.Equal(result, tt.want) {
-				t.Errorf("HandleGetTrains() = %v, want %v", result, tt.want)
+			if tt.wantBody {
+				var result []shared.Train
+				if err = jsonDecode(recorder.Body, &result); err != nil {
+					t.Fatal(err)
+				}
+				if !slices.Equal(result, tt.want) {
+					t.Errorf("HandleGetTrains() = %v, want %v", result, tt.want)
+				}
 			}
 		})
 	}
 }
 
 func TestHandleGetTrainByRef(t *testing.T) {
+	mockTrain := shared.Train{
+		Ref:         "f5d2892a-d872-4520-84b0-6e20aae7c776",
+		Description: "test1",
+		PosX:        0,
+		PosY:        0,
+	}
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
-		ts             trainStore
+		ts             trainGetter
 		wantStatusCode int
 		wantTrainBody  bool
 		wantTrain      shared.Train
 	}{
 		{
 			"Populated train store returns matching train",
-			inMemTrainStore{
-				"f5d2892a-d872-4520-84b0-6e20aae7c776": {
-					Ref:         "f5d2892a-d872-4520-84b0-6e20aae7c776",
-					Description: "test1",
-					PosX:        0,
-					PosY:        0,
-				},
+			mockTrainGetter{
+				getTrainByRef:  mockTrain,
+				getTrainExists: true,
 			},
 			http.StatusOK,
 			true,
-			shared.Train{
-				Ref:         "f5d2892a-d872-4520-84b0-6e20aae7c776",
-				Description: "test1",
-				PosX:        0,
-				PosY:        0,
-			},
+			mockTrain,
 		},
 		{
-			"Empty train store returns not found",
-			inMemTrainStore{},
+			"Populated train store with no item matching ref returns not found",
+			mockTrainGetter{
+				getTrainByRef:  shared.Train{},
+				getTrainExists: false,
+			},
 			http.StatusNotFound,
 			false,
 			shared.Train{},
 		},
 		{
-			"Populated train store with no item with ref returns not found",
-			inMemTrainStore{
-				"c54fa1a5-8cfc-46db-a083-8f5b9f1d3c09": {
-					Ref:         "c54fa1a5-8cfc-46db-a083-8f5b9f1d3c09",
-					Description: "test1",
-					PosX:        0,
-					PosY:        0,
-				},
+			"Internal error returns internal server error",
+			mockTrainGetter{
+				getTrainByRefError: errors.New("Eek"),
 			},
-			http.StatusNotFound,
+			http.StatusInternalServerError,
 			false,
 			shared.Train{},
 		},
@@ -119,10 +140,10 @@ func TestHandleGetTrainByRef(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
-			handler := HandleGetTrainByRef(tt.ts)
+			handler := handleGetTrainByRef(tt.ts)
 
 			req, err := http.NewRequest("GET", "/trains/{ref}", nil)
-			req.SetPathValue("ref", "f5d2892a-d872-4520-84b0-6e20aae7c776")
+			req.SetPathValue("ref", mockTrain.Ref)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -147,7 +168,7 @@ func TestHandlePostTrain(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
-		ts             trainStore
+		ts             trainCreater
 		wantStatusCode int
 		wantTrainBody  bool
 		wantTrain      shared.Train
@@ -185,7 +206,7 @@ func TestHandlePostTrain(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
-			handler := HandlePostTrain(tt.ts, "test")
+			handler := handlePostTrain(tt.ts, "test")
 			train := shared.Train{
 				Ref:         "f5d2892a-d872-4520-84b0-6e20aae7c776",
 				Description: "test1",

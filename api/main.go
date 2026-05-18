@@ -17,10 +17,13 @@ func main() {
 
 func setupMock() dependencies {
 	return dependencies{
-		ts: inMemTrainStore{
+		trainStore: inMemTrainStore{
 			"test": shared.Train{
 				Ref: "test",
 			},
+		},
+		secretVerifier: inMemSecretVerifier{
+			"test": "test_key",
 		},
 	}
 }

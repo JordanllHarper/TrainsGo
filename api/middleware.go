@@ -40,3 +40,16 @@ func addLogging(next http.Handler) http.Handler {
 			log.Printf("%d response <== %s\n", loggingWriter.statusCode, pathVal)
 		})
 }
+
+func addSecretValidation(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			auth := r.Header.Get("Authorization")
+			if auth == "" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r)
+		},
+	)
+}
