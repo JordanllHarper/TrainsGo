@@ -82,17 +82,13 @@ func main() {
 	dur := time.Millisecond * (time.Duration(*updateTime))
 
 	posCh := make(chan pos)
-	go travel(startPos, endPos, mockMovPos(*movementInc), dur, posCh)
-	listenForUpdates(http.DefaultClient, posCh, tr)
-}
-
-func listenForUpdates(c *http.Client, posCh chan pos, t trainInfo) {
+	go mockTravel(startPos, endPos, *movementInc, dur, posCh)
 	for p := range posCh {
 		b, err := getUpdateBody(p)
 		if err != nil {
 			log.Fatalf("Error updating position: %s", err)
 		}
-		sendUpdate(*c, b, addr, t)
+		sendHttpUpdate(http.DefaultClient, b, addr, tr)
 	}
 }
 
@@ -107,9 +103,9 @@ func getUpdateBody(p pos) (*bytes.Reader, error) {
 	return bytes.NewReader(b), nil
 }
 
-func travel(
+func mockTravel(
 	startPos, endPos pos,
-	getPosFunc getPos,
+	inc int,
 	updDur time.Duration,
 	posCh chan pos,
 ) {
@@ -120,7 +116,7 @@ func travel(
 		switch currentState {
 		case moving:
 			posCh <- currentPos
-			currentPos = getPosFunc(currentPos, endPos)
+			currentPos = move(currentPos, endPos, inc)
 			if currentPos == endPos {
 				currentState = ended
 			}
@@ -136,30 +132,28 @@ func travel(
 	}
 }
 
-func mockMovPos(inc int) getPos {
-	return func(currentPos, endPos pos) pos {
-		move := func(src, dest int) int {
-			if src < dest && dest-src > inc {
-				src += inc
-			} else if src > dest && src-dest > inc {
-				src -= inc
-			} else {
-				src = dest
-			}
-			return src
+func move(currentPos, endPos pos, inc int) pos {
+	move := func(src, dest int) int {
+		if src < dest && dest-src > inc {
+			src += inc
+		} else if src > dest && src-dest > inc {
+			src -= inc
+		} else {
+			src = dest
 		}
-		if currentPos.posX != endPos.posX {
-			currentPos.posX = move(currentPos.posX, endPos.posX)
-		}
-
-		if currentPos.posY != endPos.posY {
-			currentPos.posY = move(currentPos.posY, endPos.posY)
-		}
-		return currentPos
+		return src
 	}
+	if currentPos.posX != endPos.posX {
+		currentPos.posX = move(currentPos.posX, endPos.posX)
+	}
+
+	if currentPos.posY != endPos.posY {
+		currentPos.posY = move(currentPos.posY, endPos.posY)
+	}
+	return currentPos
 }
 
-func sendUpdate(c http.Client, body io.Reader, addr string, t trainInfo) error {
+func sendHttpUpdate(c *http.Client, body io.Reader, addr string, t trainInfo) error {
 	req, err := http.NewRequest(
 		http.MethodPatch,
 		fmt.Sprintf("%s/trains/%s", addr, t.ref),
