@@ -84,12 +84,14 @@ func main() {
 	posCh := make(chan pos)
 	go mockTravel(startPos, endPos, *movementInc, dur, posCh)
 	for p := range posCh {
+		log.Printf("Received pos - X: %v Y: %v", p.posX, p.posY)
 		b, err := getUpdateBody(p)
 		if err != nil {
 			log.Fatalf("Error updating position: %s", err)
 		}
 		sendHttpUpdate(http.DefaultClient, b, addr, tr)
 	}
+	log.Println("Finished")
 }
 
 func getUpdateBody(p pos) (*bytes.Reader, error) {
@@ -113,17 +115,15 @@ func mockTravel(
 	currentState := moving
 
 	for {
+		posCh <- currentPos
 		switch currentState {
 		case moving:
-			posCh <- currentPos
 			currentPos = move(currentPos, endPos, inc)
 			if currentPos == endPos {
 				currentState = ended
 			}
 			time.Sleep(updDur)
 		case ended:
-			posCh <- currentPos
-			fmt.Println("Ended")
 			close(posCh)
 			return
 		default:
@@ -169,7 +169,6 @@ func sendHttpUpdate(c *http.Client, body io.Reader, addr string, t trainInfo) er
 	if err := json.NewDecoder(res.Body).Decode(&tr); err != nil {
 		return err
 	}
-	fmt.Println("Res Body:", tr)
 
 	return nil
 }
