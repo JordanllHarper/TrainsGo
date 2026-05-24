@@ -7,6 +7,12 @@ import (
 	"github.com/JordanllHarper/trainsgo/shared"
 )
 
+type dependencies struct {
+	trainStore
+	stationStore
+	secretVerifier
+}
+
 func main() {
 	addr := "127.0.0.1:8080"
 	stores := setupMock()
@@ -25,8 +31,17 @@ func setupMock() dependencies {
 				},
 			},
 		},
+		stationStore: inMemStationStore{},
 		secretVerifier: inMemSecretVerifier{
 			"test": "test_key",
 		},
 	}
+}
+
+func setup(d dependencies, srvBase string) http.Handler {
+	mux := http.NewServeMux()
+	handler := setupTrainRoutes(mux, d, srvBase)
+	handler = setupStationRoutes(mux, d, srvBase)
+	handler = addLogging(handler)
+	return handler
 }

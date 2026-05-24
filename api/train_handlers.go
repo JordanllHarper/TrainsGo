@@ -9,6 +9,21 @@ import (
 	"github.com/JordanllHarper/trainsgo/shared"
 )
 
+func setupTrainRoutes(
+	mux *http.ServeMux,
+	d dependencies,
+	srvBase string,
+) http.Handler {
+
+	mux.HandleFunc(getTrains, handleGetTrains(d))
+	mux.HandleFunc(getTrainByRef, handleGetTrainByRef(d))
+	mux.HandleFunc(getTrainByRefLive, handleGetTrainByRefLive(d))
+	mux.HandleFunc(postTrain, handlePostTrain(d, srvBase))
+	mux.HandleFunc(patchTrain, addSecretValidation(handlePatchTrain(d, d)))
+
+	return mux
+}
+
 const getTrains = "GET /trains"
 
 func handleGetTrains(tg trainGetter) http.HandlerFunc {
@@ -49,7 +64,7 @@ func handleGetTrainByRefLive(tg trainUpdateSender) http.HandlerFunc {
 		ref := r.PathValue("ref")
 		ch, err := tg.RegisterListener(ref, r.Context())
 		switch {
-		case errors.Is(err, errorAlreadyExists):
+		case errors.Is(err, errorEmptyTrainRef) || errors.Is(err, errorNotFound):
 			badRequest(w, err)
 			return
 		case err != nil:
@@ -85,7 +100,7 @@ func handleGetTrainByRefLive(tg trainUpdateSender) http.HandlerFunc {
 
 const postTrain = "POST /trains"
 
-func handlePostTrain(tu trainCreater, srvBase string) http.HandlerFunc {
+func handlePostTrain(tu trainCreator, srvBase string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var t shared.Train
 		if err := jsonDecode(r.Body, &t); err != nil {
@@ -94,11 +109,14 @@ func handlePostTrain(tu trainCreater, srvBase string) http.HandlerFunc {
 		}
 
 		switch err := tu.CreateTrain(t); {
-		case errors.Is(err, errorEmptyRef):
+		case errors.Is(err, errorEmptyTrainRef):
 			badRequest(w, err)
 			return
 		case errors.Is(err, errorAlreadyExists):
 			http.Error(w, "Train with ref already exists", http.StatusConflict)
+			return
+		case err != nil:
+			internalServerError(w, err)
 			return
 		}
 
@@ -140,7 +158,12 @@ func handlePatchTrain(tgu trainUpdater, sv secretVerifier) http.HandlerFunc {
 			req.PosX,
 			req.PosY,
 		)
-		if err != nil {
+
+		switch {
+		case errors.Is(err, errorEmptyTrainRef):
+			badRequest(w, err)
+			return
+		case err != nil:
 			internalServerError(w, err)
 			return
 		}

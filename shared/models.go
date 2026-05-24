@@ -6,3 +6,10 @@ type Train struct {
 	PosX        int    `json:"posX"`
 	PosY        int    `json:"posY"`
 }
+
+type Station struct {
+	Id   string `json:"id"`
+	Name string `json:"name"`
+	PosX int    `json:"posX"`
+	PosY int    `json:"posY"`
+}

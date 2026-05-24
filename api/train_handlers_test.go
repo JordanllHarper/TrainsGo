@@ -174,7 +174,7 @@ func TestHandlePostTrain(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
-		ts             trainCreater
+		ts             trainCreator
 		wantStatusCode int
 		wantTrainBody  bool
 		wantTrain      shared.Train
@@ -190,7 +190,9 @@ func TestHandlePostTrain(t *testing.T) {
 		},
 		{
 			"Empty train store return 201 created",
-			inMemTrainStore{},
+			inMemTrainStore{
+				trains: map[string]shared.Train{},
+			},
 			http.StatusCreated,
 			true,
 			shared.Train{

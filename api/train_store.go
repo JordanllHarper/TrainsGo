@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"maps"
 	"slices"
@@ -12,25 +13,20 @@ import (
 )
 
 var (
-	errorEmptyRef      = errors.New("invalid empty ref")
-	errorDoesntExist   = errors.New("train doesn't exist")
-	errorAlreadyExists = errors.New("train already exists")
+	errorEmptyTrainRef = errors.New("invalid empty ref")
 )
+
+func withTrainContext(err error) error { return fmt.Errorf("train %w", err) }
 
 type (
 	trainStore interface {
 		trainGetter
-		trainDeleter
-		trainCreater
+		trainCreator
 		trainUpdater
 		trainUpdateSender
 	}
 
-	trainDeleter interface {
-		DeleteTrain(ref string) error
-	}
-
-	trainCreater interface {
+	trainCreator interface {
 		CreateTrain(t shared.Train) error
 	}
 
@@ -51,12 +47,12 @@ type (
 		trains    map[string]shared.Train
 		listeners map[string][]listener
 	}
-)
 
-type listener struct {
-	sendCh chan shared.Train
-	ctx    context.Context
-}
+	listener struct {
+		sendCh chan shared.Train
+		ctx    context.Context
+	}
+)
 
 func (ts inMemTrainStore) GetTrains() ([]shared.Train, error) {
 	return slices.Collect(maps.Values(ts.trains)), nil
@@ -69,10 +65,10 @@ func (ts inMemTrainStore) GetTrainByRef(ref string) (exists bool, t shared.Train
 
 func (ts inMemTrainStore) RegisterListener(ref string, ctx context.Context) (chan shared.Train, error) {
 	if strings.TrimSpace(ref) == "" {
-		return nil, errorEmptyRef
+		return nil, errorEmptyTrainRef
 	}
 	if _, ok := ts.trains[ref]; !ok {
-		return nil, errorDoesntExist
+		return nil, withTrainContext(errorNotFound)
 	}
 
 	sendCh := make(chan shared.Train)
@@ -94,10 +90,10 @@ func (ts inMemTrainStore) RegisterListener(ref string, ctx context.Context) (cha
 
 func (ts inMemTrainStore) CreateTrain(t shared.Train) error {
 	if strings.TrimSpace(t.Ref) == "" {
-		return errorEmptyRef
+		return errorEmptyTrainRef
 	}
 	if _, exists := ts.trains[t.Ref]; exists {
-		return errorAlreadyExists
+		return withTrainContext(errorAlreadyExists)
 	}
 	ts.trains[t.Ref] = t
 	return nil
@@ -109,12 +105,12 @@ func (ts inMemTrainStore) UpdateTrain(
 	posX, posY *int,
 ) (shared.Train, error) {
 	if strings.TrimSpace(ref) == "" {
-		return shared.Train{}, errorEmptyRef
+		return shared.Train{}, withTrainContext(errorEmptyTrainRef)
 	}
 
 	t, ok := ts.trains[ref]
 	if !ok {
-		return shared.Train{}, errorDoesntExist
+		return shared.Train{}, withTrainContext(errorNotFound)
 	}
 
 	if desc != nil {
@@ -149,9 +145,4 @@ func (ts inMemTrainStore) UpdateTrain(
 
 	ts.trains[ref] = t
 	return t, nil
-}
-
-func (ts inMemTrainStore) DeleteTrain(ref string) error {
-	delete(ts.trains, ref)
-	return nil
 }
