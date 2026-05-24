@@ -18,8 +18,11 @@ func main() {
 func setupMock() dependencies {
 	return dependencies{
 		trainStore: inMemTrainStore{
-			"test": shared.Train{
-				Ref: "test",
+			listeners: map[string][]listener{},
+			trains: map[string]shared.Train{
+				"test": {
+					Ref: "test",
+				},
 			},
 		},
 		secretVerifier: inMemSecretVerifier{

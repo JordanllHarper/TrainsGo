@@ -25,6 +25,13 @@ func (lrw *middlewareResponseWriter) Write(b []byte) (int, error) {
 	return lrw.ResponseWriter.Write(b)
 }
 
+// Add this explicit implementation to keep Flusher support intact
+func (lrw *middlewareResponseWriter) Flush() {
+	if flusher, ok := lrw.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
 func addLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {

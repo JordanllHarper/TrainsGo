@@ -22,6 +22,7 @@ func setupTrainRoutes(
 
 	mux.HandleFunc(getTrains, handleGetTrains(d))
 	mux.HandleFunc(getTrainByRef, handleGetTrainByRef(d))
+	mux.HandleFunc(getTrainByRefLive, handleGetTrainByRefLive(d))
 	mux.HandleFunc(postTrain, handlePostTrain(d, srvBase))
 	mux.HandleFunc(patchTrain, addSecretValidation(handlePatchTrain(d, d)))
 

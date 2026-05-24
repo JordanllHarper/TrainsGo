@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/JordanllHarper/trainsgo/shared"
@@ -41,6 +42,47 @@ func handleGetTrainByRef(tg trainGetter) http.HandlerFunc {
 	}
 }
 
+const getTrainByRefLive = "GET /trains/{ref}/live"
+
+func handleGetTrainByRefLive(tg trainUpdateSender) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ref := r.PathValue("ref")
+		ch, err := tg.RegisterListener(ref, r.Context())
+		switch {
+		case errors.Is(err, errorAlreadyExists):
+			badRequest(w, err)
+			return
+		case err != nil:
+			internalServerError(w, err)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+
+		clientGone := r.Context().Done()
+		rc := http.NewResponseController(w)
+
+		for {
+			select {
+			case <-clientGone:
+				log.Println("Client disconnect")
+				return
+			case t := <-ch:
+				if err := jsonEncode(w, t); err != nil {
+					log.Println("error sending update to listeners for ref:", ref)
+					return
+				}
+				if err := rc.Flush(); err != nil {
+					log.Println("error pushing data to client:", err)
+					return
+				}
+			}
+		}
+	}
+}
+
 const postTrain = "POST /trains"
 
 func handlePostTrain(tu trainCreater, srvBase string) http.HandlerFunc {
@@ -70,7 +112,7 @@ func handlePostTrain(tu trainCreater, srvBase string) http.HandlerFunc {
 
 const patchTrain = "PATCH /trains/{ref}"
 
-func handlePatchTrain(tgu trainGetUpdater, sv secretVerifier) http.HandlerFunc {
+func handlePatchTrain(tgu trainUpdater, sv secretVerifier) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		ref := r.PathValue("ref")
@@ -81,17 +123,6 @@ func handlePatchTrain(tgu trainGetUpdater, sv secretVerifier) http.HandlerFunc {
 			return
 		}
 
-		exists, t, err := tgu.GetTrainByRef(ref)
-		if err != nil {
-			internalServerError(w, err)
-			return
-		}
-
-		if !exists {
-			http.NotFound(w, r)
-			return
-		}
-
 		valid, err := sv.Verify(ref, auth)
 		if err != nil {
 			internalServerError(w, err)
@@ -99,23 +130,17 @@ func handlePatchTrain(tgu trainGetUpdater, sv secretVerifier) http.HandlerFunc {
 		}
 
 		if !valid {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
-		if req.Description != nil {
-			t.Description = *req.Description
-		}
-
-		if req.PosX != nil {
-			t.PosX = *req.PosX
-		}
-
-		if req.PosY != nil {
-			t.PosY = *req.PosY
-		}
-
-		if _, err := tgu.UpsertTrain(t); err != nil {
+		t, err := tgu.UpdateTrain(
+			ref,
+			req.Description,
+			req.PosX,
+			req.PosY,
+		)
+		if err != nil {
 			internalServerError(w, err)
 			return
 		}

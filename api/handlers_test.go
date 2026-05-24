@@ -164,6 +164,12 @@ func TestHandleGetTrainByRef(t *testing.T) {
 	}
 }
 
+type mockTrainCreator struct {
+	err error
+}
+
+func (mtc mockTrainCreator) CreateTrain(t shared.Train) error { return mtc.err }
+
 func TestHandlePostTrain(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
@@ -176,14 +182,7 @@ func TestHandlePostTrain(t *testing.T) {
 	}{
 		{
 			"Populated train store returns conflict",
-			inMemTrainStore{
-				"f5d2892a-d872-4520-84b0-6e20aae7c776": {
-					Ref:         "f5d2892a-d872-4520-84b0-6e20aae7c776",
-					Description: "test1",
-					PosX:        0,
-					PosY:        0,
-				},
-			},
+			mockTrainCreator{errorAlreadyExists},
 			http.StatusConflict,
 			false,
 			shared.Train{},
