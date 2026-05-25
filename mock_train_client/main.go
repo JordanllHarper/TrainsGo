@@ -149,11 +149,9 @@ func move(currentPos, endPos pos, inc int) pos {
 }
 
 func sendHttpUpdate(p pos, addr string, t trainInfo) error {
-	body, err := getUpdateBody(p)
-	if err != nil {
-		return fmt.Errorf("error getting update body: %w", err)
+	body := shared.PatchTrainRequest{
+		PosX: &p.posX, PosY: &p.posY,
 	}
-
 	req, err := http.NewRequest(
 		http.MethodPatch,
 		fmt.Sprintf("%s/trains/%s", addr, t.ref),
