@@ -13,3 +13,5 @@ type Station struct {
 	PosX int    `json:"posX"`
 	PosY int    `json:"posY"`
 }
+
+func (t Train) Read(b []byte) (int, error) { return jsonRead(t, b) }
