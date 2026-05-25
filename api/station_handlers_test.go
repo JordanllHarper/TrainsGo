@@ -341,3 +341,45 @@ func TestHandlePatchStation(t *testing.T) {
 		})
 	}
 }
+
+type mockStationDeleter struct {
+	err error
+}
+
+func (m mockStationDeleter) DeleteStation(id string) error { return m.err }
+
+func TestHandleDeleteStation(t *testing.T) {
+	tests := []struct {
+		name           string
+		ts             stationDeleter
+		wantStatusCode int
+	}{
+		{
+			"Internal error returns internal server error",
+			mockStationDeleter{err: errors.New("eek")},
+			http.StatusInternalServerError,
+		},
+		{
+			"Station doesn't exist returns no content",
+			mockStationDeleter{},
+			http.StatusNoContent,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			handler := handleDeleteStationById(tt.ts)
+
+			req, err := http.NewRequest("DELETE", "/stations/{id}", nil)
+			req.SetPathValue("id", "f5d2892a-d872-4520-84b0-6e20aae7c776")
+			if err != nil {
+				t.Fatal(err)
+			}
+			handler(recorder, req)
+
+			if recorder.Code != tt.wantStatusCode {
+				t.Errorf("handleDeleteStationById() status code = %v, want %v", recorder.Code, tt.wantStatusCode)
+			}
+		})
+	}
+}
