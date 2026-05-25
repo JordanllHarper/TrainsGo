@@ -1,12 +1,12 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/JordanllHarper/trainsgo/shared"
@@ -171,36 +171,47 @@ type mockTrainCreator struct {
 func (mtc mockTrainCreator) CreateTrain(t shared.Train) error { return mtc.err }
 
 func TestHandlePostTrain(t *testing.T) {
+	train := shared.Train{
+		Ref:         "f5d2892a-d872-4520-84b0-6e20aae7c776",
+		Description: "test1",
+		PosX:        0,
+		PosY:        0,
+	}
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
 		ts             trainCreator
+		trainReq       io.Reader
 		wantStatusCode int
 		wantTrainBody  bool
 		wantTrain      shared.Train
 		wantLocation   string
 	}{
 		{
+			"Bad json returns badRequest",
+			mockTrainCreator{},
+			strings.NewReader("Bad train string"),
+			http.StatusBadRequest,
+			false,
+			shared.Train{},
+			"",
+		},
+		{
 			"Populated train store returns conflict",
 			mockTrainCreator{errorAlreadyExists},
+			train,
 			http.StatusConflict,
 			false,
 			shared.Train{},
 			"",
 		},
 		{
-			"Empty train store return 201 created",
-			inMemTrainStore{
-				trains: map[string]shared.Train{},
-			},
+			"Valid train returns 201 created",
+			mockTrainCreator{},
+			train,
 			http.StatusCreated,
 			true,
-			shared.Train{
-				Ref:         "f5d2892a-d872-4520-84b0-6e20aae7c776",
-				Description: "test1",
-				PosX:        0,
-				PosY:        0,
-			},
+			train,
 			"test/trains/f5d2892a-d872-4520-84b0-6e20aae7c776",
 		},
 	}
@@ -208,17 +219,8 @@ func TestHandlePostTrain(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			handler := handlePostTrain(tt.ts, "test")
-			train := shared.Train{
-				Ref:         "f5d2892a-d872-4520-84b0-6e20aae7c776",
-				Description: "test1",
-				PosX:        0,
-				PosY:        0,
-			}
 
-			body, _ := json.Marshal(train)
-
-			req, err := http.NewRequest("POST", "/trains", bytes.NewBuffer(body))
-			req.SetPathValue("ref", "f5d2892a-d872-4520-84b0-6e20aae7c776")
+			req, err := http.NewRequest("POST", "/trains", tt.trainReq)
 			if err != nil {
 				t.Fatal(err)
 			}
